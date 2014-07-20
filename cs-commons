@@ -4,6 +4,37 @@
 # Provides useful automation for creation and maintenance of
 # cs-commons sites and artifacts.
 
+require 'readline'
+
+class Util
+	def self.ask(prompt)
+		buf = Readline.readline(prompt, true)
+		return buf
+	end
+
+	def self.run(*cmd)
+		raise "command #{cmd[0]} failed" if !system(*cmd)
+	end
+
+	def self.mkdir(dirname)
+		run('mkdir', '-p', dirname)
+	end
+
+	def self.copy_template_file(dirname, template_file)
+		Dir.chdir(dirname) do
+			if m = /^(.*)\/[^\/]+$/.match(template_file)
+				puts "making directory: #{m[1]}"
+				mkdir(m[1])
+			end
+			run(
+				'wget',
+				"https://raw.githubusercontent.com/cs-commons/template-site/master/#{template_file}",
+				"--output-document=#{template_file}"
+			)
+		end
+	end
+end
+
 class Command
 	attr_reader :name, :args, :helptext
 
@@ -40,7 +71,28 @@ class Help < Command
 	end
 end
 
+# Command to create a new site
+class CreateSite < Command
+	def initialize
+		super("create-site", "<sitename>", "create a new cs-commons site (e.g., for a course)")
+	end
+
+	def exec(args)
+		raise "missing sitename" if args.length != 1
+		sitename = args[0]
+		siteurl = Util.ask("URL where site will be hosted: ")
+
+		Util.mkdir(sitename)
+		# FIXME: probably we should attempt to fetch the entire template site
+		Util.copy_template_file(sitename, "js/cs-commons.js")
+		Util.copy_template_file(sitename, "css/cs1.css")
+		Util.copy_template_file(sitename, "_layouts/default.html")
+		Util.copy_template_file(sitename, "_layouts/fragment.html")
+	end
+end
+
 Command.add(Help.new)
+Command.add(CreateSite.new)
 
 def usage
 	print <<"EOF"
@@ -57,6 +109,12 @@ command_name = ARGV.shift
 
 usage if !Command.all.has_key?(command_name)
 
-Command.all[command_name].exec(ARGV)
+begin
+	Command.all[command_name].exec(ARGV)
+rescue Exception => e
+	puts "Error: #{e}"
+	puts e.backtrace
+	exit(1)
+end
 
 # vim:ts=2:
