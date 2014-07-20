@@ -1,0 +1,62 @@
+#! /usr/bin/ruby
+
+# cs-commons helper script.
+# Provides useful automation for creation and maintenance of
+# cs-commons sites and artifacts.
+
+class Command
+	attr_reader :name, :args, :helptext
+
+	def initialize(name, args, helptext)
+		@name = name
+		@args = args
+		@helptext = helptext
+	end
+
+	@@commands = {}
+
+	def self.add(cmd)
+		@@commands[cmd.name] = cmd
+	end
+
+	def self.all
+		@@commands
+	end
+end
+
+class Help < Command
+	def initialize
+		super("help", "", "print synopsis of each command")
+	end
+
+	def exec(args)
+		puts "Commands:"
+		commands = Command.all
+		commands.keys.sort.each do |command_name|
+			cmd = commands[command_name]
+			# TODO: nicer formatting
+			puts "  #{cmd.name} #{cmd.args} #{cmd.helptext}"
+		end
+	end
+end
+
+Command.add(Help.new)
+
+def usage
+	print <<"EOF"
+Usage: cs-commons <command> [args]
+Run "cs-commons help" for more information".
+EOF
+	exit(1)
+end
+
+usage if ARGV.length == 0
+
+command_name = ARGV.shift
+#puts "#{command_name}"
+
+usage if !Command.all.has_key?(command_name)
+
+Command.all[command_name].exec(ARGV)
+
+# vim:ts=2:
