@@ -95,6 +95,20 @@ class CreateSite < Command
 		Util.copy_template_file(sitename, "css/site.css")
 		Util.copy_template_file(sitename, "_layouts/default.html")
 		Util.copy_template_file(sitename, "_layouts/fragment.html")
+
+		# Generate _config.yml
+		print "Creating _config.yml..."
+		STDOUT.flush
+		File.open("#{sitename}/_config.yml", "w") do |f|
+			f.print <<"EOF"
+url: "#{siteurl}"
+
+markdown: rdiscount
+
+pygments: true
+EOF
+		end
+		puts "done"
 	end
 end
 
