@@ -16,6 +16,10 @@ class Util
 		raise "command #{cmd[0]} failed" if !system(*cmd)
 	end
 
+	def self.run_quiet(*cmd)
+		raise "command #{cmd[0]} failed" if !system(*cmd, out: '/dev/null', err: '/dev/null')
+	end
+
 	def self.mkdir(dirname)
 		run('mkdir', '-p', dirname)
 	end
@@ -23,14 +27,17 @@ class Util
 	def self.copy_template_file(dirname, template_file)
 		Dir.chdir(dirname) do
 			if m = /^(.*)\/[^\/]+$/.match(template_file)
-				puts "making directory: #{m[1]}"
+				#puts "making directory: #{m[1]}"
 				mkdir(m[1])
 			end
-			run(
+			print "Copying #{template_file}..."
+			STDOUT.flush
+			run_quiet(
 				'wget',
 				"https://raw.githubusercontent.com/cs-commons/template-site/master/#{template_file}",
 				"--output-document=#{template_file}"
 			)
+			puts "done"
 		end
 	end
 end
@@ -85,7 +92,7 @@ class CreateSite < Command
 		Util.mkdir(sitename)
 		# FIXME: probably we should attempt to fetch the entire template site
 		Util.copy_template_file(sitename, "js/cs-commons.js")
-		Util.copy_template_file(sitename, "css/cs1.css")
+		Util.copy_template_file(sitename, "css/site.css")
 		Util.copy_template_file(sitename, "_layouts/default.html")
 		Util.copy_template_file(sitename, "_layouts/fragment.html")
 	end
