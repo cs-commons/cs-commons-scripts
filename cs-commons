@@ -39,7 +39,7 @@ class Util
 	end
 
 	def self.task(message)
-		print message
+		print "#{message}..."
 		STDOUT.flush
 		yield
 		puts "done"
@@ -51,18 +51,35 @@ class Util
 				#puts "making directory: #{m[1]}"
 				mkdir(m[1])
 			end
-			task("Copying #{template_file}...") do
+			task("Copying #{template_file}") do
 				run_quiet( 'wget', "#{MASTER_SITE}/#{template_file}", "--output-document=#{template_file}")
 			end
 		end
 	end
 
 	def self.create_file(dirname, filename, contents)
-		task("Creating #{filename}...") do
+		task("Creating #{filename}") do
 			File.open("#{dirname}/#{filename}", "w") do |f|
 				f.print(contents)
 			end
 		end
+	end
+
+	def self.find_files_in(dirname, extension)
+		result = []
+		Dir.chdir(dirname) do
+			IO.popen("find . -name '*\\.#{extension}' -print") do |io|
+				io.each_line do |line|
+					line.chomp!
+					result.push(line[2..line.length])
+				end
+			end
+		end
+		return result
+	end
+
+	def self.is_site?
+		return File.exists?('cs-commons-site.json')
 	end
 end
 
@@ -176,6 +193,55 @@ class Checkin < Command
 	end
 
 	def exec(args)
+		raise "This directory doesn't seem to be a cs-commons site" if !Util.is_site?
+
+		site_meta = JSON.parse(IO.read('cs-commons-site.json'))
+
+		all_files = []
+		Util.task("Finding files to check in") do
+			['md', 'html', 'json', 'js', 'css', 'yml'].each do |ext|
+				all_files.concat(Util.find_files_in('.', ext))
+			end
+			all_files.push('.gitignore') if File.exists?('.gitignore')
+		end
+
+		#puts "All files:"
+		#all_files.each {|filename| puts filename}
+		Util.task("Creating empty git repository") do
+			Util.run_quiet('git', 'init')
+			Util.run_quiet('git', 'checkout', '-b', 'gh-pages')
+		end
+
+		Util.task("Adding files") do
+			cmd = ['git', 'add'].concat(all_files)
+			#puts "All files: #{cmd.join('|')}"
+			#puts "cmd.length=#{cmd.length}"
+			Util.run_quiet(*cmd)
+		end
+
+		puts "Running git status:"
+		Util.run('git', 'status')
+
+		puts "If you want to make adjustments to the files to be added,"
+		puts "I can run a shell for you."
+		need_shell = Util.ask("Would you like to start a shell (yes/no): ")
+		if need_shell.downcase[0] == 'y'
+			puts "Starting a shell.  Exit the shell when you are ready to commit"
+			puts "files to the repository."
+			Util.run(ENV['SHELL'])
+		end
+
+		Util.task("Committing files") do
+			Util.run_quiet('git', 'commit', '-mInitial checkin')
+		end
+
+		Util.task("Setting origin") do
+			Util.run_quiet('git', 'remote', 'add', 'origin', site_meta['repo_git_url'])
+		end
+
+		Util.task("Pushing to origin") do
+			Util.run_quiet('git', 'push', '-u', 'origin', 'gh-pages')
+		end
 	end
 end
 
@@ -184,6 +250,7 @@ end
 # ----------------------------------------------------------------------
 Command.add(Help.new)
 Command.add(CreateSite.new)
+Command.add(Checkin.new)
 
 # ----------------------------------------------------------------------
 # Function to print usage information
