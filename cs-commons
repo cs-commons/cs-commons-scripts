@@ -5,7 +5,21 @@
 # cs-commons sites and artifacts.
 
 require 'readline'
+require 'json'
 
+MASTER_SITE = "https://raw.githubusercontent.com/cs-commons/template-site/master"
+
+# Required site metadata entries (and descriptions)
+REQUIRED_SITE_METADATA = {
+	'site_url' => 'URL where site will be hosted',
+	'title' => 'Title to display on index page',
+	'repo_git_url' => 'Git repository URL',
+	'repo_pub_url' => 'Public URL of Git repository',
+}
+
+# ----------------------------------------------------------------------
+# Util class - utility functions
+# ----------------------------------------------------------------------
 class Util
 	def self.ask(prompt)
 		buf = Readline.readline(prompt, true)
@@ -24,24 +38,37 @@ class Util
 		run('mkdir', '-p', dirname)
 	end
 
+	def self.task(message)
+		print message
+		STDOUT.flush
+		yield
+		puts "done"
+	end
+
 	def self.copy_template_file(dirname, template_file)
 		Dir.chdir(dirname) do
 			if m = /^(.*)\/[^\/]+$/.match(template_file)
 				#puts "making directory: #{m[1]}"
 				mkdir(m[1])
 			end
-			print "Copying #{template_file}..."
-			STDOUT.flush
-			run_quiet(
-				'wget',
-				"https://raw.githubusercontent.com/cs-commons/template-site/master/#{template_file}",
-				"--output-document=#{template_file}"
-			)
-			puts "done"
+			task("Copying #{template_file}...") do
+				run_quiet( 'wget', "#{MASTER_SITE}/#{template_file}", "--output-document=#{template_file}")
+			end
+		end
+	end
+
+	def self.create_file(dirname, filename, contents)
+		task("Creating #{filename}...") do
+			File.open("#{dirname}/#{filename}", "w") do |f|
+				f.print(contents)
+			end
 		end
 	end
 end
 
+# ----------------------------------------------------------------------
+# Base class for commands
+# ----------------------------------------------------------------------
 class Command
 	attr_reader :name, :args, :helptext
 
@@ -62,6 +89,9 @@ class Command
 	end
 end
 
+# ----------------------------------------------------------------------
+# Command to print out help information for each command
+# ----------------------------------------------------------------------
 class Help < Command
 	def initialize
 		super("help", "", "print synopsis of each command")
@@ -78,7 +108,9 @@ class Help < Command
 	end
 end
 
+# ----------------------------------------------------------------------
 # Command to create a new site
+# ----------------------------------------------------------------------
 class CreateSite < Command
 	def initialize
 		super("create-site", "<sitename>", "create a new cs-commons site (e.g., for a course)")
@@ -87,8 +119,15 @@ class CreateSite < Command
 	def exec(args)
 		raise "missing sitename" if args.length != 1
 		sitename = args[0]
-		siteurl = Util.ask("URL where site will be hosted: ")
+#		siteurl = Util.ask("URL where site will be hosted: ")
+#		title = Util.ask("Title to display on index page: ")
+		site_meta = {}
+		REQUIRED_SITE_METADATA.keys.sort.each do |key|
+			descr = REQUIRED_SITE_METADATA[key]
+			site_meta[key] = Util.ask("#{descr}: ")
+		end
 
+		# Copy files from template site
 		Util.mkdir(sitename)
 		# FIXME: probably we should attempt to fetch the entire template site
 		Util.copy_template_file(sitename, "js/cs-commons.js")
@@ -97,24 +136,58 @@ class CreateSite < Command
 		Util.copy_template_file(sitename, "_layouts/fragment.html")
 
 		# Generate _config.yml
-		print "Creating _config.yml..."
-		STDOUT.flush
-		File.open("#{sitename}/_config.yml", "w") do |f|
-			f.print <<"EOF"
-url: "#{siteurl}"
-
+		Util.create_file(sitename, "_config.yml", <<"EOF")
+url: "#{site_meta['site_url']}"
 markdown: rdiscount
-
 pygments: true
 EOF
-		end
-		puts "done"
+
+		# Generate index.md
+		Util.create_file(sitename, "index.md", <<"EOF")
+---
+layout: default
+title: "#{site_meta['title']}"
+---
+
+Welcome to the site!
+
+There is nothing here yet.
+EOF
+
+		# Generate .gitignore
+		Util.create_file(sitename, ".gitignore", <<"EOF")
+*.swp
+*~
+EOF
+
+		# Generate cs-commons-site.json
+		site_json = JSON.fast_generate(site_meta)
+		Util.create_file(sitename, "cs-commons-site.json", site_json)
 	end
 end
 
+# ----------------------------------------------------------------------
+# Command to make a git repository for site, check in initial
+# files and commit them to a gh-pages branch
+# ----------------------------------------------------------------------
+class Checkin < Command
+	def initialize
+		super("checkin", "", "check site files into local git repository")
+	end
+
+	def exec(args)
+	end
+end
+
+# ----------------------------------------------------------------------
+# Register commands
+# ----------------------------------------------------------------------
 Command.add(Help.new)
 Command.add(CreateSite.new)
 
+# ----------------------------------------------------------------------
+# Function to print usage information
+# ----------------------------------------------------------------------
 def usage
 	print <<"EOF"
 Usage: cs-commons <command> [args]
@@ -123,6 +196,9 @@ EOF
 	exit(1)
 end
 
+# ----------------------------------------------------------------------
+# Main code - figure out which command was requested and execute it
+# ----------------------------------------------------------------------
 usage if ARGV.length == 0
 
 command_name = ARGV.shift
