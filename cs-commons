@@ -17,6 +17,8 @@ REQUIRED_SITE_METADATA = {
 	'repo_pub_url' => 'Public URL of Git repository',
 }
 
+GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)\.git$/
+
 # ----------------------------------------------------------------------
 # Util class - utility functions
 # ----------------------------------------------------------------------
@@ -24,6 +26,11 @@ class Util
 	def self.ask(prompt)
 		buf = Readline.readline(prompt, true)
 		return buf
+	end
+
+	def self.ask_yn(prompt)
+		buf = Readline.readline("#{prompt} (yes/no) ", true)
+		return buf.downcase == 'y' || buf.downcase == 'yes'
 	end
 
 	def self.run(*cmd)
@@ -81,6 +88,17 @@ class Util
 	def self.is_site?
 		return File.exists?('cs-commons-site.json')
 	end
+
+	def self.is_github_url?(url)
+		return GITHUB_URL_RE.match(url) ? true : false
+	end
+
+	def self.parse_github_url(url)
+		m = GITHUB_URL_RE.match(url)
+		throw "#{url} is not a GitHub url" if !m
+		return [m[1], m[2]]
+	end
+		
 end
 
 # ----------------------------------------------------------------------
@@ -136,12 +154,34 @@ class CreateSite < Command
 	def exec(args)
 		raise "missing sitename" if args.length != 1
 		sitename = args[0]
-#		siteurl = Util.ask("URL where site will be hosted: ")
-#		title = Util.ask("Title to display on index page: ")
+
 		site_meta = {}
+
+		repo_git_url = Util.ask("#{REQUIRED_SITE_METADATA['repo_git_url']}: ")
+		site_meta['repo_git_url'] = repo_git_url
+
+		# If the git URL is at GitHub, then we can predict the
+		# site URL and the repo public URL
+		if Util.is_github_url?(repo_git_url)
+			puts "You're using GitHub, excellent."
+			github_user, github_repo = Util.parse_github_url(repo_git_url)
+			site_url = "http://#{github_user}.github.io/#{github_repo}"
+			repo_pub_url = "https://github.com/#{github_user}/#{github_repo}"
+			puts "I predict that you will want to use the following values:"
+			puts "  #{REQUIRED_SITE_METADATA['site_url']}: #{site_url}"
+			puts "  #{REQUIRED_SITE_METADATA['repo_pub_url']}: #{repo_pub_url}"
+			ok = Util.ask_yn("Are these values correct?")
+			if ok
+				site_meta['site_url'] = site_url
+				site_meta['repo_pub_url'] = repo_pub_url
+			end
+		end
+
 		REQUIRED_SITE_METADATA.keys.sort.each do |key|
-			descr = REQUIRED_SITE_METADATA[key]
-			site_meta[key] = Util.ask("#{descr}: ")
+			if !site_meta.has_key?(key)
+				descr = REQUIRED_SITE_METADATA[key]
+				site_meta[key] = Util.ask("#{descr}: ")
+			end
 		end
 
 		# Copy files from template site
@@ -224,8 +264,7 @@ class Checkin < Command
 
 		puts "If you want to make adjustments to the files to be added,"
 		puts "I can run a shell for you."
-		need_shell = Util.ask("Would you like to start a shell (yes/no): ")
-		if need_shell.downcase[0] == 'y'
+		if Util.ask_yn("Would you like to start a shell?")
 			puts "Starting a shell.  Exit the shell when you are ready to commit"
 			puts "files to the repository."
 			Util.run(ENV['SHELL'])
