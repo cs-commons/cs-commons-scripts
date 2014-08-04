@@ -155,7 +155,13 @@ class Util
 			end
 		end
 	end
-		
+
+	def self.create_default_gitignore(dirname)
+		create_file(dirname, ".gitignore", <<"EOF")
+*.swp
+*~
+EOF
+	end
 end
 
 # ----------------------------------------------------------------------
@@ -273,11 +279,7 @@ Welcome to the site!
 There is nothing here yet.
 EOF
 
-		# Generate .gitignore
-		Util.create_file(sitename, ".gitignore", <<"EOF")
-*.swp
-*~
-EOF
+		Util.create_default_gitignore(sitename)
 
 		# Generate cs-commons-site.json
 		site_json = JSON.fast_generate(site_meta)
@@ -321,7 +323,7 @@ class CreateArtifact < Command
 		artifact_meta = {
 			'title' => title,
 			'type' => type,
-			'authors' => { 'name' => author_name, 'email' => author_email, 'website' => author_website },
+			'authors' => [{ 'name' => author_name, 'email' => author_email, 'website' => author_website }],
 			'license' => license,
 			'keywords' => keywords.split(/\s+/),
 		}
@@ -369,6 +371,9 @@ TODO: write a description of this artifact.
 
 TODO: describe the subsitutions and fragments the artifact supports.
 EOF
+
+		# Create .gitignore
+		Util.create_default_gitignore(artifact_dir)
 	end
 end
 
@@ -383,9 +388,9 @@ class Checkin < Command
 
 	def exec(args)
 		if Util.is_site?
-			self._exec_for_site(args)
+			_exec_for_site(args)
 		elsif Util.is_artifact?
-			self._exec_for_artifact(args)
+			_exec_for_artifact(args)
 		else
 			raise "This directory doesn't seem to be a cs-commons site or artifact"
 		end
@@ -394,21 +399,21 @@ class Checkin < Command
 	def _exec_for_site(args)
 		site_meta = JSON.parse(IO.read('cs-commons-site.json'))
 
-		all_files = self._find_files_to_check_in(CONTENT_FILE_EXTENSIONS)
+		all_files = _find_files_to_check_in(CONTENT_FILE_EXTENSIONS)
 
 		#puts "All files:"
 		#all_files.each {|filename| puts filename}
-		self._git_create_repo()
+		_git_create_repo()
 
 		Util.task("Setting default branch to gh-pages") do
 			Util.run_quiet('git', 'checkout', '-b', 'gh-pages')
 		end
 
-		self._git_add_files(all_files)
-		self._git_confirm_added_files()
-		self._git_commit_files()
-		self._git_set_origin(site_meta)
-		self._git_push_to_origin('gh-pages')
+		_git_add_files(all_files)
+		_git_confirm_added_files()
+		_git_commit_files()
+		_git_set_origin(site_meta)
+		_git_push_to_origin('gh-pages')
 	end
 
 	def _exec_for_artifact(args)
@@ -416,12 +421,12 @@ class Checkin < Command
 
 		all_files = _find_files_to_check_in(CONTENT_FILE_EXTENSIONS)
 
-		self._git_create_repo()
-		self._git_add_files(all_files)
-		self._git_confirm_added_files()
-		self._git_commit_files()
-		self._git_set_origin(artifact_meta)
-		self._git_push_to_origin('master')
+		_git_create_repo()
+		_git_add_files(all_files)
+		_git_confirm_added_files()
+		_git_commit_files()
+		_git_set_origin(artifact_meta)
+		_git_push_to_origin('master')
 	end
 
 	def _find_files_to_check_in(extensions)
