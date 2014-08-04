@@ -9,13 +9,18 @@ require 'json'
 
 MASTER_SITE = "https://raw.githubusercontent.com/cs-commons/template-site/master"
 
+# Metadata required by both artifacts and sites
+REQUIRED_COMMON_METADATA = {
+	'repo_git_url' => 'Git repository URL',
+	'repo_pub_url' => 'Public URL of Git repository',
+}
+
 # Required site metadata entries (and descriptions)
 REQUIRED_SITE_METADATA = {
 	'site_url' => 'URL where site will be hosted',
 	'title' => 'Title to display on index page',
-	'repo_git_url' => 'Git repository URL',
-	'repo_pub_url' => 'Public URL of Git repository',
 }
+REQUIRED_SITE_METADATA.merge!(REQUIRED_COMMON_METADATA)
 
 GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)\.git$/
 
@@ -44,6 +49,12 @@ LICENSES = [
 		'fullname' => 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0',
 		'website' => 'https://creativecommons.org/licenses/by-nc-sa/4.0'
 	},
+]
+
+# File extensions of content files.  Files with these extensions
+# are automatically added by the checkin command.
+CONTENT_FILE_EXTENSIONS = [
+	'md', 'html', 'json', 'js', 'css', 'yml', 'png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG'
 ]
 
 # ----------------------------------------------------------------------
@@ -120,6 +131,10 @@ class Util
 		return File.exists?('cs-commons-site.json')
 	end
 
+	def self.is_artifact?
+		return File.exists?('cs-commons-artifact.json')
+	end
+
 	def self.is_github_url?(url)
 		return GITHUB_URL_RE.match(url) ? true : false
 	end
@@ -128,6 +143,17 @@ class Util
 		m = GITHUB_URL_RE.match(url)
 		throw "#{url} is not a GitHub url" if !m
 		return [m[1], m[2]]
+	end
+
+	# Add keys from given key hash (e.g., REQUIRED_SITE_METADATA)
+	# to given configuration hash if they are not already present.
+	def self.add_required_keys(key_hash, config_hash)
+		key_hash.keys.sort.each do |key|
+			if !config_hash.has_key?(key)
+				descr = key_hash[key]
+				config_hash[key] = Util.ask("#{descr}: ")
+			end
+		end
 	end
 		
 end
@@ -218,12 +244,7 @@ class CreateSite < Command
 			end
 		end
 
-		REQUIRED_SITE_METADATA.keys.sort.each do |key|
-			if !site_meta.has_key?(key)
-				descr = REQUIRED_SITE_METADATA[key]
-				site_meta[key] = Util.ask("#{descr}: ")
-			end
-		end
+		Util.add_required_keys(REQUIRED_SITE_METADATA, site_meta)
 
 		# Copy files from template site
 		Util.mkdir(sitename)
@@ -273,7 +294,7 @@ class CreateArtifact < Command
 	end
 
 	def exec(args)
-		raise "Please specify an artifact name" if !(artifact_dir = args.shift)
+		raise "Please specify an artifact directory" if !(artifact_dir = args.shift)
 		raise "Directory #{artifact_dir} already exists" if Dir.exists?(artifact_dir)
 
 		# Get all required metadata
@@ -304,6 +325,9 @@ class CreateArtifact < Command
 			'license' => license,
 			'keywords' => keywords.split(/\s+/),
 		}
+
+		# Get git repo URLs
+		Util.add_required_keys(REQUIRED_COMMON_METADATA, artifact_meta)
 
 		# Create artifact directory
 		Util.mkdir(artifact_dir)
@@ -359,9 +383,9 @@ class Checkin < Command
 
 	def exec(args)
 		if Util.is_site?
-			_exec_for_site(args)
+			self._exec_for_site(args)
 		elsif Util.is_artifact?
-			_exec_for_artifact(args)
+			self._exec_for_artifact(args)
 		else
 			raise "This directory doesn't seem to be a cs-commons site or artifact"
 		end
@@ -370,29 +394,64 @@ class Checkin < Command
 	def _exec_for_site(args)
 		site_meta = JSON.parse(IO.read('cs-commons-site.json'))
 
+		all_files = self._find_files_to_check_in(CONTENT_FILE_EXTENSIONS)
+
+		#puts "All files:"
+		#all_files.each {|filename| puts filename}
+		self._git_create_repo()
+
+		Util.task("Setting default branch to gh-pages") do
+			Util.run_quiet('git', 'checkout', '-b', 'gh-pages')
+		end
+
+		self._git_add_files(all_files)
+		self._git_confirm_added_files()
+		self._git_commit_files()
+		self._git_set_origin(site_meta)
+		self._git_push_to_origin('gh-pages')
+	end
+
+	def _exec_for_artifact(args)
+		artifact_meta = JSON.parse(IO.read("cs-commons-artifact.json"))
+
+		all_files = _find_files_to_check_in(CONTENT_FILE_EXTENSIONS)
+
+		self._git_create_repo()
+		self._git_add_files(all_files)
+		self._git_confirm_added_files()
+		self._git_commit_files()
+		self._git_set_origin(artifact_meta)
+		self._git_push_to_origin('master')
+	end
+
+	def _find_files_to_check_in(extensions)
 		all_files = []
 		Util.task("Finding files to check in") do
-			['md', 'html', 'json', 'js', 'css', 'yml'].each do |ext|
+			extensions.each do |ext|
 				all_files.concat(Util.find_files_in('.', ext))
 			end
 			all_files.push('.gitignore') if File.exists?('.gitignore')
 		end
+		return all_files
+	end
 
-		#puts "All files:"
-		#all_files.each {|filename| puts filename}
+	def _git_create_repo
 		Util.task("Creating empty git repository") do
 			Util.run_quiet('git', 'init')
-			Util.run_quiet('git', 'checkout', '-b', 'gh-pages')
 		end
+	end
 
+	def _git_add_files(all_files)
 		Util.task("Adding files") do
 			cmd = ['git', 'add'].concat(all_files)
 			#puts "All files: #{cmd.join('|')}"
 			#puts "cmd.length=#{cmd.length}"
 			Util.run_quiet(*cmd)
 		end
+	end
 
-		puts "Running git status:"
+	def _git_confirm_added_files
+		puts "Running git status to confirm files to be added:"
 		Util.run('git', 'status')
 
 		puts "If you want to make adjustments to the files to be added,"
@@ -402,22 +461,24 @@ class Checkin < Command
 			puts "files to the repository."
 			Util.run(ENV['SHELL'])
 		end
+	end
 
+	def _git_commit_files
 		Util.task("Committing files") do
 			Util.run_quiet('git', 'commit', '-mInitial checkin')
 		end
+	end
 
+	def _git_set_origin(meta)
 		Util.task("Setting origin") do
-			Util.run_quiet('git', 'remote', 'add', 'origin', site_meta['repo_git_url'])
-		end
-
-		Util.task("Pushing to origin") do
-			Util.run_quiet('git', 'push', '-u', 'origin', 'gh-pages')
+			Util.run_quiet('git', 'remote', 'add', 'origin', meta['repo_git_url'])
 		end
 	end
 
-	def _exec_for_artifact(args)
-		raise "TODO: artifact checkin"
+	def _git_push_to_origin(branch)
+		Util.task("Pushing to origin") do
+			Util.run_quiet('git', 'push', '-u', 'origin', branch)
+		end
 	end
 end
 
