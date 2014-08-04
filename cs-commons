@@ -113,14 +113,23 @@ class Command
 		@helptext = helptext
 	end
 
+	@@subclasses = []
 	@@commands = {}
 
-	def self.add(cmd)
-		@@commands[cmd.name] = cmd
+	def self.inherited(subclass)
+		puts "Subclass #{subclass.to_s}"
+		@@subclasses.push(subclass)
 	end
 
 	def self.all
-		@@commands
+		if @@commands.empty?
+			@@subclasses.each do |subclass|
+				cmd = subclass.new
+				puts "Adding #{cmd.name}"
+				@@commands[cmd.name] = cmd
+			end
+		end
+		return @@commands
 	end
 end
 
@@ -283,13 +292,6 @@ class Checkin < Command
 		end
 	end
 end
-
-# ----------------------------------------------------------------------
-# Register commands
-# ----------------------------------------------------------------------
-Command.add(Help.new)
-Command.add(CreateSite.new)
-Command.add(Checkin.new)
 
 # ----------------------------------------------------------------------
 # Function to print usage information
