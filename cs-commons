@@ -19,10 +19,41 @@ REQUIRED_SITE_METADATA = {
 
 GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)\.git$/
 
+# Of the creative commons licenses, we don't predefine
+# any of the no-derivs variants, since cs-commons by definition
+# allows users to customize the content for their site,
+# violating the "unchanged and in whole" restriction.
+LICENSES = [
+	{
+		'shortname' => 'CC BY 4.0',
+		'fullname' => 'Creative Commons Attribution 4.0',
+		'webpage' => 'https://creativecommons.org/licenses/by/4.0'
+	},
+	{
+		'shortname' => 'CC BY-SA 4.0',
+		'fullname' => 'Creative Commons Attribution-ShareAlike 4.0',
+		'webpage' => 'https://creativecommons.org/licenses/by-sa/4.0'
+	},
+	{
+		'shortname' => 'CC BY-NC 4.0',
+		'fullname' => 'Creative Commons Attribution-NonCommercial',
+		'webpage' => 'https://creativecommons.org/licenses/by-nc/4.0'
+	},
+	{
+		'shortname' => 'CC BY-NC-SA 4.0',
+		'fullname' => 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0',
+		'webpage' => 'https://creativecommons.org/licenses/by-nc-sa/4.0'
+	},
+]
+
 # ----------------------------------------------------------------------
 # Util class - utility functions
 # ----------------------------------------------------------------------
 class Util
+	def self.print_usage
+		puts "Usage: cs-commons <command> [args]"
+	end
+
 	def self.ask(prompt)
 		buf = Readline.readline(prompt, true)
 		return buf
@@ -117,7 +148,7 @@ class Command
 	@@commands = {}
 
 	def self.inherited(subclass)
-		puts "Subclass #{subclass.to_s}"
+		#puts "Subclass #{subclass.to_s}"
 		@@subclasses.push(subclass)
 	end
 
@@ -125,7 +156,7 @@ class Command
 		if @@commands.empty?
 			@@subclasses.each do |subclass|
 				cmd = subclass.new
-				puts "Adding #{cmd.name}"
+				#puts "Adding #{cmd.name}"
 				@@commands[cmd.name] = cmd
 			end
 		end
@@ -142,6 +173,7 @@ class Help < Command
 	end
 
 	def exec(args)
+		Util.print_usage
 		puts "Commands:"
 		commands = Command.all
 		commands.keys.sort.each do |command_name|
@@ -233,17 +265,72 @@ EOF
 end
 
 # ----------------------------------------------------------------------
-# Command to make a git repository for site, check in initial
-# files and commit them to a gh-pages branch
+# Command to create a new artifact directory.
 # ----------------------------------------------------------------------
-class Checkin < Command
+class CreateArtifact < Command
 	def initialize
-		super("checkin", "", "check site files into local git repository")
+		super("create-artifact", "<artifact name>", "create a new cs-commons artifact (e.g., an assignment)")
 	end
 
 	def exec(args)
-		raise "This directory doesn't seem to be a cs-commons site" if !Util.is_site?
+		artifact_dir = args.shift
+		raise "Directory #{artifact_dir} already exists" if Dir.exists?(artifact_dir)
 
+		# Get all required metadata
+		author_name = Util.ask("Your full name: ")
+		author_email = Util.ask("Your email address: ")
+		author_website = Util.ask("Your website: ")
+		puts "Choose a license, or enter -1 to enter your own license:"
+		LICENSES.each_with_index do |license, i|
+			puts "  #{i}) #{license['shortname']}"
+		end
+		choice = Util.ask("Which license (0..#{LICENSES.length-1}, or -1)? ").to_i
+		if choice >= 0
+			license = LICENSES[choice]
+		else
+			license = {}
+			license['shortname'] = Util.ask("License short name: ")
+			license['fullname'] = Util.ask("License full name: ")
+			license['website'] = Util.ask("License website: ")
+		end
+		title = Util.ask("Artifact title: ")
+		type = Util.ask("Artifact type (e.g., assignment, lab): ")
+		keywords = Util.ask("Artifact keywords (separated by spaces): ")
+
+		artifact_meta = {
+			'title' => title,
+			'type' => type,
+			'authors' => { 'name' => author_name, 'email' => author_email, 'website' => author_website },
+			'license' => license,
+			'keywords' => keywords.split(/\s+/),
+		}
+
+		Util.mkdir(artifact_dir)
+		artifact_json = JSON.fast_generate(artifact_meta)
+		Util.create_file(artifact_dir, "cs-commons-artifact.json", artifact_json)
+	end
+end
+
+# ----------------------------------------------------------------------
+# Command to make a git repository for site or artifact,
+# add and commit initial files, and push to remote repo.
+# ----------------------------------------------------------------------
+class Checkin < Command
+	def initialize
+		super("checkin", "", "create git repo for site or artifact, and push to remote")
+	end
+
+	def exec(args)
+		if Util.is_site?
+			_exec_for_site(args)
+		elsif Util.is_artifact?
+			_exec_for_artifact(args)
+		else
+			raise "This directory doesn't seem to be a cs-commons site or artifact"
+		end
+	end
+
+	def _exec_for_site(args)
 		site_meta = JSON.parse(IO.read('cs-commons-site.json'))
 
 		all_files = []
@@ -291,15 +378,21 @@ class Checkin < Command
 			Util.run_quiet('git', 'push', '-u', 'origin', 'gh-pages')
 		end
 	end
+
+	def _exec_for_artifact(args)
+		raise "TODO: artifact checkin"
+	end
 end
+
+# ----------------------------------------------------------------------
+# Command to create a new artifact
+# ----------------------------------------------------------------------
 
 # ----------------------------------------------------------------------
 # Function to print usage information
 # ----------------------------------------------------------------------
 def usage
 	print <<"EOF"
-Usage: cs-commons <command> [args]
-Run "cs-commons help" for more information".
 EOF
 	exit(1)
 end
@@ -307,12 +400,20 @@ end
 # ----------------------------------------------------------------------
 # Main code - figure out which command was requested and execute it
 # ----------------------------------------------------------------------
-usage if ARGV.length == 0
+if ARGV.length == 0
+	Util.print_usage
+	puts "Run \"cs-commons help\" for more information\"."
+	exit(1)
+end
 
 command_name = ARGV.shift
 #puts "#{command_name}"
 
-usage if !Command.all.has_key?(command_name)
+if !Command.all.has_key?(command_name)
+	puts "Unknown command #{command_name}"
+	Command.all['help'].exec(ARGV)
+	exit(1)
+end
 
 begin
 	Command.all[command_name].exec(ARGV)
