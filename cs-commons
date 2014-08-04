@@ -27,22 +27,22 @@ LICENSES = [
 	{
 		'shortname' => 'CC BY 4.0',
 		'fullname' => 'Creative Commons Attribution 4.0',
-		'webpage' => 'https://creativecommons.org/licenses/by/4.0'
+		'website' => 'https://creativecommons.org/licenses/by/4.0'
 	},
 	{
 		'shortname' => 'CC BY-SA 4.0',
 		'fullname' => 'Creative Commons Attribution-ShareAlike 4.0',
-		'webpage' => 'https://creativecommons.org/licenses/by-sa/4.0'
+		'website' => 'https://creativecommons.org/licenses/by-sa/4.0'
 	},
 	{
 		'shortname' => 'CC BY-NC 4.0',
 		'fullname' => 'Creative Commons Attribution-NonCommercial',
-		'webpage' => 'https://creativecommons.org/licenses/by-nc/4.0'
+		'website' => 'https://creativecommons.org/licenses/by-nc/4.0'
 	},
 	{
 		'shortname' => 'CC BY-NC-SA 4.0',
 		'fullname' => 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0',
-		'webpage' => 'https://creativecommons.org/licenses/by-nc-sa/4.0'
+		'website' => 'https://creativecommons.org/licenses/by-nc-sa/4.0'
 	},
 ]
 
@@ -273,7 +273,7 @@ class CreateArtifact < Command
 	end
 
 	def exec(args)
-		artifact_dir = args.shift
+		raise "Please specify an artifact name" if !(artifact_dir = args.shift)
 		raise "Directory #{artifact_dir} already exists" if Dir.exists?(artifact_dir)
 
 		# Get all required metadata
@@ -305,9 +305,46 @@ class CreateArtifact < Command
 			'keywords' => keywords.split(/\s+/),
 		}
 
+		# Create artifact directory
 		Util.mkdir(artifact_dir)
+
+		# Create cs-commons-artifact.json from artifact metadata
 		artifact_json = JSON.fast_generate(artifact_meta)
 		Util.create_file(artifact_dir, "cs-commons-artifact.json", artifact_json)
+
+		# Create index.md
+		Util.create_file(artifact_dir, "index.md", <<"EOF")
+---
+layout: default
+title: "#{title}"
+---
+
+TODO: add the content of this #{type} here!  Don't forget to add placeholders for local details!
+EOF
+
+		# Create README.md
+		Util.create_file(artifact_dir, "README.md", <<"EOF")
+---
+layout: default
+title: "Readme for #{title}"
+---
+
+# Synopsis
+
+This is a CS-Commons #{type} artifact.
+
+The author is #{author_name} &lt;#{author_email}&gt;.
+
+This artifact is licensed using the <a href="#{license['website']}">#{license['fullname']}</a> license.
+
+# Description
+
+TODO: write a description of this artifact.
+
+# Customization
+
+TODO: describe the subsitutions and fragments the artifact supports.
+EOF
 	end
 end
 
@@ -419,7 +456,7 @@ begin
 	Command.all[command_name].exec(ARGV)
 rescue Exception => e
 	puts "Error: #{e}"
-	puts e.backtrace
+	#puts e.backtrace
 	exit(1)
 end
 
