@@ -240,7 +240,7 @@ end
 # ----------------------------------------------------------------------
 # Command to print out help information for each command
 # ----------------------------------------------------------------------
-class Help < Command
+class HelpCmd < Command
 	def initialize
 		super("help", "", "print synopsis of each command")
 	end
@@ -285,7 +285,7 @@ end
 # ----------------------------------------------------------------------
 # Command to create a new site
 # ----------------------------------------------------------------------
-class CreateSite < Command
+class CreateSiteCmd < Command
 	def initialize
 		super("create-site", "<sitename>", "create a new CS Commons site (e.g., for a course)")
 	end
@@ -349,7 +349,7 @@ end
 # ----------------------------------------------------------------------
 # Command to create a new artifact directory.
 # ----------------------------------------------------------------------
-class CreateArtifact < Command
+class CreateArtifactCmd < Command
 	def initialize
 		super("create-artifact", "<artifact name>", "create a new CS Commons artifact (e.g., an assignment)")
 	end
@@ -453,7 +453,7 @@ end
 # Command to make a git repository for site or artifact,
 # add and commit initial files, and push to remote repo.
 # ----------------------------------------------------------------------
-class Checkin < Command
+class CheckinCmd < Command
 	def initialize
 		super("checkin", "", "create git repo for site or artifact, and push to remote")
 	end
