@@ -1,8 +1,8 @@
 #! /usr/bin/ruby
 
-# cs-commons helper script.
+# CS Commons helper script.
 # Provides useful automation for creation and maintenance of
-# cs-commons sites and artifacts.
+# CS Commons sites and artifacts.
 
 require 'readline'
 require 'json'
@@ -22,10 +22,10 @@ REQUIRED_SITE_METADATA = {
 }
 REQUIRED_SITE_METADATA.merge!(REQUIRED_COMMON_METADATA)
 
-GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)\.git$/
+GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)(\.git)?$/
 
 # Of the creative commons licenses, we don't predefine
-# any of the no-derivs variants, since cs-commons by definition
+# any of the no-derivs variants, since CS Commons by definition
 # allows users to customize the content for their site,
 # violating the "unchanged and in whole" restriction.
 LICENSES = [
@@ -221,7 +221,7 @@ end
 # ----------------------------------------------------------------------
 class CreateSite < Command
 	def initialize
-		super("create-site", "<sitename>", "create a new cs-commons site (e.g., for a course)")
+		super("create-site", "<sitename>", "create a new CS Commons site (e.g., for a course)")
 	end
 
 	def exec(args)
@@ -292,7 +292,7 @@ end
 # ----------------------------------------------------------------------
 class CreateArtifact < Command
 	def initialize
-		super("create-artifact", "<artifact name>", "create a new cs-commons artifact (e.g., an assignment)")
+		super("create-artifact", "<artifact name>", "create a new CS Commons artifact (e.g., an assignment)")
 	end
 
 	def exec(args)
@@ -392,7 +392,7 @@ class Checkin < Command
 		elsif Util.is_artifact?
 			_exec_for_artifact(args)
 		else
-			raise "This directory doesn't seem to be a cs-commons site or artifact"
+			raise "This directory doesn't seem to be a CS Commons site or artifact"
 		end
 	end
 
@@ -415,7 +415,9 @@ class Checkin < Command
 		_git_set_origin(site_meta)
 		_git_push_to_origin('gh-pages')
 
-		_github_check_description_tag(site_meta) if Util.is_github_url(site_meta['repo_git_url'])
+		if Util.is_github_url?(site_meta['repo_git_url'])
+			_github_check_description_tag(site_meta)
+		end
 	end
 
 	def _exec_for_artifact(args)
@@ -430,7 +432,9 @@ class Checkin < Command
 		_git_set_origin(artifact_meta)
 		_git_push_to_origin('master')
 
-		_github_check_description_tag(artifact_meta) if Util.is_github_url(artifact_meta['repo_git_url'])
+		if Util.is_github_url?(artifact_meta['repo_git_url'])
+			_github_check_description_tag(artifact_meta)
+		end
 	end
 
 	def _find_files_to_check_in(extensions)
@@ -493,9 +497,9 @@ class Checkin < Command
 	
 	def _github_check_description_tag(meta)
 		tag_found = false
+		repo_git_url = meta['repo_git_url']
+		github_user, github_repo = Util.parse_github_url(repo_git_url)
 		Util.task("Checking repository description for (cs commons) tag") do
-			repo_git_url = meta['repo_git_url']
-			github_user, github_repo = Util.parse_github_url(repo_git_url)
 			repo_metadata_url = "https://api.github.com/repos/#{github_user}/#{github_repo}"
 			IO.popen("wget -q --output-document=- '#{repo_metadata_url}'") do |fh|
 				repo_meta = JSON.parse(fh.read)
@@ -504,7 +508,7 @@ class Checkin < Command
 		end
 		if !tag_found
 			puts <<"EOF"
->>> IMPORTANT! <<<
+>>> WARNING! <<<
 
 Your repository description does not contain the text '(cs commons)'.
 Please add this text to the repository description.  Without this
@@ -559,7 +563,7 @@ begin
 	Command.all[command_name].exec(ARGV)
 rescue Exception => e
 	puts "Error: #{e}"
-	#puts e.backtrace
+	puts e.backtrace
 	exit(1)
 end
 
