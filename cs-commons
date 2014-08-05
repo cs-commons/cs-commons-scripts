@@ -241,7 +241,9 @@ class Help < Command
 		commands.keys.sort.each do |command_name|
 			cmd = commands[command_name]
 			# TODO: nicer formatting
-			puts "  #{cmd.name} #{cmd.args} #{cmd.helptext}"
+			puts "  #{cmd.name} #{cmd.args}"
+			puts "    #{cmd.helptext}"
+			puts ""
 		end
 	end
 end
