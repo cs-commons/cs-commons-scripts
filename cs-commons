@@ -22,6 +22,13 @@ REQUIRED_SITE_METADATA = {
 }
 REQUIRED_SITE_METADATA.merge!(REQUIRED_COMMON_METADATA)
 
+# Required author metadata
+REQUIRED_AUTHOR_METADATA = {
+	'name' => 'Your full name',
+	'email' => 'Your email address',
+	'website' => 'Your website',
+}
+
 GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)(\.git)?$/
 
 # Of the creative commons licenses, we don't predefine
@@ -75,6 +82,15 @@ class Util
 		return buf.downcase == 'y' || buf.downcase == 'yes'
 	end
 
+	def self.ask_defval(prompt, defval)
+		if defval.nil? || defval.empty?
+			return ask("#{prompt}: ")
+		else
+			buf = ask("#{prompt} (default: #{defval}): ")
+			return buf.empty? ? defval : buf
+		end
+	end
+
 	def self.run(*cmd)
 		raise "command #{cmd[0]} failed" if !system(*cmd)
 	end
@@ -109,7 +125,7 @@ class Util
 	def self.create_file(dirname, filename, contents)
 		task("Creating #{filename}") do
 			File.open("#{dirname}/#{filename}", "w") do |f|
-				f.print(contents)
+				f.puts(contents)
 			end
 		end
 	end
@@ -148,11 +164,25 @@ class Util
 	# Add keys from given key hash (e.g., REQUIRED_SITE_METADATA)
 	# to given configuration hash if they are not already present.
 	def self.add_required_keys(key_hash, config_hash)
-		key_hash.keys.sort.each do |key|
+		key_hash.keys.each do |key|
 			if !config_hash.has_key?(key)
 				descr = key_hash[key]
-				config_hash[key] = Util.ask("#{descr}: ")
+				config_hash[key] = ask("#{descr}: ")
 			end
+		end
+	end
+
+	# Add keys from given key hash (e.g., REQUIRED_AUTHOR_METADATA)
+	# to given configuration hash, allowing use of default values
+	# from config_hash if present.
+	def self.add_required_keys_with_defaults(key_hash, config_hash)
+		key_hash.keys.each do |key|
+			defval = ''
+			if config_hash.has_key?(key)
+				defval = config_hash[key]
+			end
+			choice = ask_defval(key_hash[key], defval)
+			config_hash[key] = choice
 		end
 	end
 
@@ -212,6 +242,35 @@ class Help < Command
 			cmd = commands[command_name]
 			# TODO: nicer formatting
 			puts "  #{cmd.name} #{cmd.args} #{cmd.helptext}"
+		end
+	end
+end
+
+# ----------------------------------------------------------------------
+# Command to edit global config information
+# ----------------------------------------------------------------------
+class ConfigCmd < Command
+	def initialize
+		super("config", "", "edit global configuration information (e.g., identity)")
+	end
+
+	def exec(args)
+		config_file = "#{ENV['HOME']}/.cs-commons"
+		config = {}
+		if File.exists?(config_file)
+			config.merge!(JSON.parse(IO.read(config_file)))
+		end
+		puts "Enter configuration information (press Enter to accept default value, if any):"
+		REQUIRED_AUTHOR_METADATA.keys.each do |key|
+			defval = ''
+			if config.has_key?(key)
+				defval = config[key]
+			end
+			choice = Util.ask_defval(REQUIRED_AUTHOR_METADATA[key], defval)
+			config[key] = choice
+		end
+		if Util.ask_yn("Save configuration information in #{config_file}")
+			Util.create_file(ENV['HOME'], ".cs-commons", JSON.pretty_generate(config))
 		end
 	end
 end
@@ -282,7 +341,7 @@ EOF
 		Util.create_default_gitignore(sitename)
 
 		# Generate cs-commons-site.json
-		site_json = JSON.fast_generate(site_meta)
+		site_json = JSON.pretty_generate(site_meta)
 		Util.create_file(sitename, "cs-commons-site.json", site_json)
 	end
 end
@@ -300,9 +359,12 @@ class CreateArtifact < Command
 		raise "Directory #{artifact_dir} already exists" if Dir.exists?(artifact_dir)
 
 		# Get all required metadata
-		author_name = Util.ask("Your full name: ")
-		author_email = Util.ask("Your email address: ")
-		author_website = Util.ask("Your website: ")
+
+		# Author metadata
+		author_meta = {}
+		Util.add_required_keys(REQUIRED_AUTHOR_METADATA, author_meta)
+
+		# License metadata
 		puts "Choose a license, or enter -1 to enter your own license:"
 		LICENSES.each_with_index do |license, i|
 			puts "  #{i}) #{license['shortname']}"
@@ -316,6 +378,8 @@ class CreateArtifact < Command
 			license['fullname'] = Util.ask("License full name: ")
 			license['website'] = Util.ask("License website: ")
 		end
+
+		# Artifact metadata
 		title = Util.ask("Artifact title: ")
 		type = Util.ask("Artifact type (e.g., assignment, lab): ")
 		keywords = Util.ask("Artifact keywords (separated by spaces): ")
@@ -323,7 +387,7 @@ class CreateArtifact < Command
 		artifact_meta = {
 			'title' => title,
 			'type' => type,
-			'authors' => [{ 'name' => author_name, 'email' => author_email, 'website' => author_website }],
+			'authors' => [author_meta],
 			'license' => license,
 			'keywords' => keywords.split(/\s+/),
 		}
@@ -335,7 +399,7 @@ class CreateArtifact < Command
 		Util.mkdir(artifact_dir)
 
 		# Create cs-commons-artifact.json from artifact metadata
-		artifact_json = JSON.fast_generate(artifact_meta)
+		artifact_json = JSON.pretty_generate(artifact_meta)
 		Util.create_file(artifact_dir, "cs-commons-artifact.json", artifact_json)
 
 		# Create index.md
