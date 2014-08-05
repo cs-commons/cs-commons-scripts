@@ -283,14 +283,9 @@ class ConfigCmd < Command
 			config.merge!(JSON.parse(IO.read(config_file)))
 		end
 		puts "Enter configuration information (press Enter to accept default value, if any):"
-		REQUIRED_AUTHOR_METADATA.keys.each do |key|
-			defval = ''
-			if config.has_key?(key)
-				defval = config[key]
-			end
-			choice = Util.ask_defval(REQUIRED_AUTHOR_METADATA[key], defval)
-			config[key] = choice
-		end
+
+		Util.add_required_keys_with_defaults(REQUIRED_AUTHOR_METADATA, config)
+
 		if Util.ask_yn("Save configuration information in #{config_file}")
 			Util.create_file(ENV['HOME'], ".cs-commons", JSON.pretty_generate(config))
 		end
