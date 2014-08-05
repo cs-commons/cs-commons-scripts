@@ -206,6 +206,12 @@ EOF
 end
 
 # ----------------------------------------------------------------------
+# Exception type for missing argument
+# ----------------------------------------------------------------------
+class MissingArgumentException < Exception
+end
+
+# ----------------------------------------------------------------------
 # Base class for commands
 # ----------------------------------------------------------------------
 class Command
@@ -215,6 +221,18 @@ class Command
 		@name = name
 		@args = args
 		@helptext = helptext
+	end
+
+#	def print_synposis(*cmd)
+#		pfx = cmd.empty? ? '' : " #{cmd[0]} "
+#		puts "  #{pfx}#{self.name} #{self.args}"
+#		puts "    #{self.helptext}"
+#		puts ""
+#	end
+
+	def synopsis(*cmd)
+		pfx = cmd.empty? ? '' : " #{cmd[0]} "
+		return "#{pfx}#{self.name} #{self.args}"
 	end
 
 	@@subclasses = []
@@ -251,7 +269,7 @@ class HelpCmd < Command
 		commands = Command.all
 		commands.keys.sort.each do |command_name|
 			cmd = commands[command_name]
-			puts "  #{cmd.name} #{cmd.args}"
+			puts "  #{cmd.synopsis}"
 			puts "    #{cmd.helptext}"
 			puts ""
 		end
@@ -291,8 +309,9 @@ class CreateSiteCmd < Command
 	end
 
 	def exec(args)
-		raise "missing sitename" if args.length != 1
-		sitename = args[0]
+		if !(sitename = args.shift)
+			raise MissingArgumentException, "missing sitename" 
+		end
 
 		site_meta = {}
 
@@ -355,8 +374,13 @@ class CreateArtifactCmd < Command
 	end
 
 	def exec(args)
-		raise "Please specify an artifact directory" if !(artifact_dir = args.shift)
-		raise "Directory #{artifact_dir} already exists" if Dir.exists?(artifact_dir)
+		if !(artifact_dir = args.shift)
+			raise MissingArgumentException, "Please specify an artifact directory"
+		end
+
+		if Dir.exists?(artifact_dir)
+			raise "Directory #{artifact_dir} already exists"
+		end
 
 		# Get all required metadata
 
@@ -605,6 +629,18 @@ EOF
 end
 
 # ----------------------------------------------------------------------
+# Command to import an artifact into a site
+# ----------------------------------------------------------------------
+class ImportCmd < Command
+	def initialize
+		super("import", "<artifact repo url> <local path>", "import an artifact into current site")
+	end
+
+	def exec(args)
+	end
+end
+
+# ----------------------------------------------------------------------
 # Function to print usage information
 # ----------------------------------------------------------------------
 def usage
@@ -625,14 +661,19 @@ end
 command_name = ARGV.shift
 #puts "#{command_name}"
 
-if !Command.all.has_key?(command_name)
+cmd = Command.all[command_name]
+if !cmd
 	puts "Unknown command #{command_name}"
 	Command.all['help'].exec(ARGV)
 	exit(1)
 end
 
 begin
-	Command.all[command_name].exec(ARGV)
+	cmd.exec(ARGV)
+rescue MissingArgumentException => e
+	puts "Error: #{e}"
+	puts "Usage:"
+	puts "  #{cmd.synopsis('cs-commons')}"
 rescue Exception => e
 	puts "Error: #{e}"
 	#puts e.backtrace
