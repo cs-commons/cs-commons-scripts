@@ -192,6 +192,27 @@ class Util
 *~
 EOF
 	end
+
+	# Load selected configuration keys and values from
+	# global config.  Not guaranteed to return all requested
+	# keys (since config might not exist, etc.)
+	def self.load_config_keys(keys)
+		result = {}
+		config_file = "#{ENV['HOME']}/.cs-commons"
+		if File.exists?(config_file)
+			begin
+				config = JSON.parse(IO.read(config_file))
+				keys.each do |key|
+					if config.has_key?(key)
+						result[key] = config[key]
+					end
+				end
+			rescue Exception => e
+				puts "Warning: error loading config from #{config_file}: #{e}"
+			end
+		end
+		return result
+	end
 end
 
 # ----------------------------------------------------------------------
@@ -236,11 +257,10 @@ class Help < Command
 
 	def exec(args)
 		Util.print_usage
-		puts "Commands:"
+		puts "\nCommands:"
 		commands = Command.all
 		commands.keys.sort.each do |command_name|
 			cmd = commands[command_name]
-			# TODO: nicer formatting
 			puts "  #{cmd.name} #{cmd.args}"
 			puts "    #{cmd.helptext}"
 			puts ""
@@ -362,9 +382,9 @@ class CreateArtifact < Command
 
 		# Get all required metadata
 
-		# Author metadata
-		author_meta = {}
-		Util.add_required_keys(REQUIRED_AUTHOR_METADATA, author_meta)
+		# Author metadata (using config for default values)
+		author_meta = Util.load_config_keys(REQUIRED_AUTHOR_METADATA.keys)
+		Util.add_required_keys_with_defaults(REQUIRED_AUTHOR_METADATA, author_meta)
 
 		# License metadata
 		puts "Choose a license, or enter -1 to enter your own license:"
@@ -425,7 +445,7 @@ title: "Readme for #{title}"
 
 This is a CS-Commons #{type} artifact.
 
-The author is #{author_name} &lt;#{author_email}&gt;.
+The author is #{author_meta['name']} &lt;#{author_meta['email']}&gt;.
 
 This artifact is licensed using the <a href="#{license['website']}">#{license['fullname']}</a> license.
 
@@ -629,7 +649,7 @@ begin
 	Command.all[command_name].exec(ARGV)
 rescue Exception => e
 	puts "Error: #{e}"
-	puts e.backtrace
+	#puts e.backtrace
 	exit(1)
 end
 
