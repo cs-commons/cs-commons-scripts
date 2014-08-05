@@ -73,18 +73,19 @@ class Util
 	end
 
 	def self.ask(prompt)
-		buf = Readline.readline(prompt, true)
+		puts prompt
+		buf = Readline.readline("=> ", true)
 		return buf
 	end
 
 	def self.ask_yn(prompt)
-		buf = Readline.readline("#{prompt} (yes/no) ", true)
+		buf = ask("#{prompt} (yes/no) ")
 		return buf.downcase == 'y' || buf.downcase == 'yes'
 	end
 
 	def self.ask_defval(prompt, defval)
 		if defval.nil? || defval.empty?
-			return ask("#{prompt}: ")
+			return ask(prompt)
 		else
 			buf = ask("#{prompt} (default: #{defval}): ")
 			return buf.empty? ? defval : buf
@@ -161,21 +162,10 @@ class Util
 		return [m[1], m[2]]
 	end
 
-	# Add keys from given key hash (e.g., REQUIRED_SITE_METADATA)
-	# to given configuration hash if they are not already present.
-	def self.add_required_keys(key_hash, config_hash)
-		key_hash.keys.each do |key|
-			if !config_hash.has_key?(key)
-				descr = key_hash[key]
-				config_hash[key] = ask("#{descr}: ")
-			end
-		end
-	end
-
 	# Add keys from given key hash (e.g., REQUIRED_AUTHOR_METADATA)
 	# to given configuration hash, allowing use of default values
 	# from config_hash if present.
-	def self.add_required_keys_with_defaults(key_hash, config_hash)
+	def self.get_required_keys(key_hash, config_hash)
 		key_hash.keys.each do |key|
 			defval = ''
 			if config_hash.has_key?(key)
@@ -284,7 +274,7 @@ class ConfigCmd < Command
 		end
 		puts "Enter configuration information (press Enter to accept default value, if any):"
 
-		Util.add_required_keys_with_defaults(REQUIRED_AUTHOR_METADATA, config)
+		Util.get_required_keys(REQUIRED_AUTHOR_METADATA, config)
 
 		if Util.ask_yn("Save configuration information in #{config_file}")
 			Util.create_file(ENV['HOME'], ".cs-commons", JSON.pretty_generate(config))
@@ -312,21 +302,14 @@ class CreateSite < Command
 		# If the git URL is at GitHub, then we can predict the
 		# site URL and the repo public URL
 		if Util.is_github_url?(repo_git_url)
-			puts "You're using GitHub, excellent."
+			puts "You're using GitHub, excellent.  I can infer the website"
+			puts "and public repository URLs."
 			github_user, github_repo = Util.parse_github_url(repo_git_url)
-			site_url = "http://#{github_user}.github.io/#{github_repo}"
-			repo_pub_url = "https://github.com/#{github_user}/#{github_repo}"
-			puts "I predict that you will want to use the following values:"
-			puts "  #{REQUIRED_SITE_METADATA['site_url']}: #{site_url}"
-			puts "  #{REQUIRED_SITE_METADATA['repo_pub_url']}: #{repo_pub_url}"
-			ok = Util.ask_yn("Are these values correct?")
-			if ok
-				site_meta['site_url'] = site_url
-				site_meta['repo_pub_url'] = repo_pub_url
-			end
+			site_meta['site_url'] = "http://#{github_user}.github.io/#{github_repo}"
+			site_meta['repo_pub_url'] = "https://github.com/#{github_user}/#{github_repo}"
 		end
 
-		Util.add_required_keys(REQUIRED_SITE_METADATA, site_meta)
+		Util.get_required_keys(REQUIRED_SITE_METADATA.reject {|k,v| k=='repo_git_url'}, site_meta)
 
 		# Copy files from template site
 		Util.mkdir(sitename)
@@ -379,7 +362,7 @@ class CreateArtifact < Command
 
 		# Author metadata (using config for default values)
 		author_meta = Util.load_config_keys(REQUIRED_AUTHOR_METADATA.keys)
-		Util.add_required_keys_with_defaults(REQUIRED_AUTHOR_METADATA, author_meta)
+		Util.get_required_keys(REQUIRED_AUTHOR_METADATA, author_meta)
 
 		# License metadata
 		puts "Choose a license, or enter -1 to enter your own license:"
@@ -410,7 +393,15 @@ class CreateArtifact < Command
 		}
 
 		# Get git repo URLs
-		Util.add_required_keys(REQUIRED_COMMON_METADATA, artifact_meta)
+		repo_git_url = Util.ask("#{REQUIRED_COMMON_METADATA['repo_git_url']}: ")
+		artifact_meta['repo_git_url'] = repo_git_url
+		if Util.is_github_url?(repo_git_url)
+			puts "You're using GitHub, excellent.  I can infer the public"
+			puts "repository URL."
+			github_user, github_repo = Util.parse_github_url(repo_git_url)
+			artifact_meta['repo_pub_url'] = "https://github.com/#{github_user}/#{github_repo}"
+		end
+		Util.get_required_keys(REQUIRED_COMMON_METADATA.reject {|k,v| k=='repo_git_url'}, artifact_meta)
 
 		# Create artifact directory
 		Util.mkdir(artifact_dir)
