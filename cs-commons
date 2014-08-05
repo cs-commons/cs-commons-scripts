@@ -414,6 +414,8 @@ class Checkin < Command
 		_git_commit_files()
 		_git_set_origin(site_meta)
 		_git_push_to_origin('gh-pages')
+
+		_github_check_description_tag(site_meta) if Util.is_github_url(site_meta['repo_git_url'])
 	end
 
 	def _exec_for_artifact(args)
@@ -427,6 +429,8 @@ class Checkin < Command
 		_git_commit_files()
 		_git_set_origin(artifact_meta)
 		_git_push_to_origin('master')
+
+		_github_check_description_tag(artifact_meta) if Util.is_github_url(artifact_meta['repo_git_url'])
 	end
 
 	def _find_files_to_check_in(extensions)
@@ -483,6 +487,43 @@ class Checkin < Command
 	def _git_push_to_origin(branch)
 		Util.task("Pushing to origin") do
 			Util.run_quiet('git', 'push', '-u', 'origin', branch)
+		end
+	end
+
+	
+	def _github_check_description_tag(meta)
+		tag_found = false
+		Util.task("Checking repository description for (cs commons) tag") do
+			repo_git_url = meta['repo_git_url']
+			github_user, github_repo = Util.parse_github_url(repo_git_url)
+			repo_metadata_url = "https://api.github.com/repos/#{github_user}/#{github_repo}"
+			IO.popen("wget -q --output-document=- '#{repo_metadata_url}'") do |fh|
+				repo_meta = JSON.parse(fh.read)
+				tag_found = repo_meta.has_key?('description') && repo_meta['description'].include?('(cs commons)')
+			end
+		end
+		if !tag_found
+			puts <<"EOF"
+>>> IMPORTANT! <<<
+
+Your repository description does not contain the text '(cs commons)'.
+Please add this text to the repository description.  Without this
+text, your site or artifact won't be found in searches for
+CS Commons content.  By adding this text, you are making it easy
+for other people to find and reuse your content, which is the
+whole point of CS Commons!
+
+To edit the description, visit the URL
+
+  https://github.com/#{github_user}/#{github_repo}
+
+and click the "Edit" link just below the name of the repository.
+Just add the text
+
+  (cs commons)
+
+anywhere in the description.
+EOF
 		end
 	end
 end
