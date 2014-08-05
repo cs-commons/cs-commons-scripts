@@ -29,7 +29,7 @@ REQUIRED_AUTHOR_METADATA = {
 	'website' => 'Your website',
 }
 
-GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/]+)(\.git)?$/
+GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/][^\/]*?)(\.git)?$/
 
 # Of the creative commons licenses, we don't predefine
 # any of the no-derivs variants, since CS Commons by definition
@@ -64,6 +64,8 @@ CONTENT_FILE_EXTENSIONS = [
 	'md', 'html', 'json', 'js', 'css', 'yml', 'png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG'
 ]
 
+COMMAND_OUTPUT_FILE = "/tmp/cs-commons-cmd-#{Process.pid}.out"
+
 # ----------------------------------------------------------------------
 # Util class - utility functions
 # ----------------------------------------------------------------------
@@ -97,7 +99,7 @@ class Util
 	end
 
 	def self.run_quiet(*cmd)
-		raise "command #{cmd[0]} failed" if !system(*cmd, out: '/dev/null', err: '/dev/null')
+		raise "command #{cmd[0]} failed" if !system(*cmd, out: '/dev/null', err: COMMAND_OUTPUT_FILE)
 	end
 
 	def self.mkdir(dirname)
@@ -637,6 +639,25 @@ class ImportCmd < Command
 	end
 
 	def exec(args)
+		if !(artifact_repo_url = args.shift)
+			raise MissingArgumentException, "missing artifact repo URL"
+		end
+		if !(local_path = args.shift)
+			raise MissingArgumentException, "missing local path"
+		end
+
+		raise "current directory is not a CS Commons site?" if !Util.is_site?
+
+		raise "directory #{local_path} already exists" if Dir.exists?(local_path)
+		raise "#{local_path} is not a relative path" if /^\//.match(local_path)
+
+		Util.task("Adding submodule for artifact") do
+			Util.run_quiet('git', 'submodule', 'add', artifact_repo_url, local_path)
+		end
+
+		puts "Artifact imported successfully.  To finish, run the commands"
+		puts "  git commit"
+		puts "  git push"
 	end
 end
 
@@ -677,7 +698,16 @@ rescue MissingArgumentException => e
 rescue Exception => e
 	puts "Error: #{e}"
 	#puts e.backtrace
+	if File.exists?(COMMAND_OUTPUT_FILE)
+		puts "A command failed.  Its error output was:"
+		puts IO.read(COMMAND_OUTPUT_FILE)
+	end
 	exit(1)
+ensure
+	# If there is any command output, delete it
+	if File.exists?(COMMAND_OUTPUT_FILE)
+		File.delete(COMMAND_OUTPUT_FILE)
+	end
 end
 
 # vim:ts=2:
