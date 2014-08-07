@@ -11,22 +11,22 @@ MASTER_SITE = "https://raw.githubusercontent.com/cs-commons/template-site/master
 
 # Metadata required by both artifacts and sites
 REQUIRED_COMMON_METADATA = {
-	'repo_git_url' => 'Git repository URL',
-	'repo_pub_url' => 'Public URL of Git repository',
+	'repo_git_url' => [0, 'Git repository URL'],
+	'repo_pub_url' => [1, 'Public URL of Git repository'],
 }
 
 # Required site metadata entries (and descriptions)
 REQUIRED_SITE_METADATA = {
-	'site_url' => 'URL where site will be hosted',
-	'title' => 'Title to display on index page',
+	'site_url' => [3, 'URL where site will be hosted'],
+	'title' => [4, 'Title to display on index page'],
 }
 REQUIRED_SITE_METADATA.merge!(REQUIRED_COMMON_METADATA)
 
 # Required author metadata
 REQUIRED_AUTHOR_METADATA = {
-	'name' => 'Your full name',
-	'email' => 'Your email address',
-	'website' => 'Your website',
+	'name' => [0, 'Your full name'],
+	'email' => [1, 'Your email address'],
+	'website' => [2, 'Your website'],
 }
 
 GITHUB_URL_RE = /^git@github.com:([^\/]+)\/([^\/][^\/]*?)(\.git)?$/
@@ -168,12 +168,14 @@ class Util
 	# to given configuration hash, allowing use of default values
 	# from config_hash if present.
 	def self.get_required_keys(key_hash, config_hash)
-		key_hash.keys.each do |key|
+		keys = key_hash.keys.sort {|x, y| key_hash[x][0] <=> key_hash[y][0] }
+
+		keys.each do |key|
 			defval = ''
 			if config_hash.has_key?(key)
 				defval = config_hash[key]
 			end
-			choice = ask_defval(key_hash[key], defval)
+			choice = ask_defval(key_hash[key][1], defval)
 			config_hash[key] = choice
 		end
 	end
@@ -317,7 +319,7 @@ class CreateSiteCmd < Command
 
 		site_meta = {}
 
-		repo_git_url = Util.ask("#{REQUIRED_SITE_METADATA['repo_git_url']}: ")
+		repo_git_url = Util.ask("#{REQUIRED_SITE_METADATA['repo_git_url'][1]}: ")
 		site_meta['repo_git_url'] = repo_git_url
 
 		# If the git URL is at GitHub, then we can predict the
@@ -419,7 +421,7 @@ class CreateArtifactCmd < Command
 		}
 
 		# Get git repo URLs
-		repo_git_url = Util.ask("#{REQUIRED_COMMON_METADATA['repo_git_url']}: ")
+		repo_git_url = Util.ask("#{REQUIRED_COMMON_METADATA['repo_git_url'][1]}: ")
 		artifact_meta['repo_git_url'] = repo_git_url
 		if Util.is_github_url?(repo_git_url)
 			puts "You're using GitHub, excellent.  I can infer the public"
