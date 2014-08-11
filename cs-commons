@@ -637,12 +637,15 @@ end
 # ----------------------------------------------------------------------
 class ImportCmd < Command
 	def initialize
-		super("import", "<artifact repo url> <local path>", "import an artifact into current site")
+		super("import-artifact", "<artifact repo url> <local path>", "import an artifact into current site")
 	end
 
 	def exec(args)
 		if !(artifact_repo_url = args.shift)
 			raise MissingArgumentException, "missing artifact repo URL"
+		end
+		if !(/^https:/.match(artifact_repo_url))
+			raise "artifact repo url #{artifact_repo_url} is not a public (https) URL"
 		end
 		if !(local_path = args.shift)
 			raise MissingArgumentException, "missing local path"
@@ -660,6 +663,25 @@ class ImportCmd < Command
 		puts "Artifact imported successfully.  To finish, run the commands"
 		puts "  git commit"
 		puts "  git push"
+	end
+end
+
+# ----------------------------------------------------------------------
+# Command to update an imported artifact to the latest version
+# ----------------------------------------------------------------------
+class UpdateCmd < Command
+	def initialize
+		super("update-artifact", "<local path>", "update imported artifact to latest version")
+	end
+
+	def exec(args)
+		puts "Not implemented yet"
+
+		# TODO
+		#    git pull in artifact dir
+		#    git add <local path> in site root dir
+		#    git commit in site root dir
+		#    git push in site root dir
 	end
 end
 
