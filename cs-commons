@@ -686,6 +686,24 @@ class UpdateCmd < Command
 end
 
 # ----------------------------------------------------------------------
+# Command to start jekyll for local viewing
+# ----------------------------------------------------------------------
+class PreviewCmd < Command
+	def initialize
+		super("preview", "", "run a jekyll server to allow local viewing of the site")
+	end
+
+	def exec(args)
+		raise "Not a CS Commons site?" if !Util.is_site?
+
+		puts "Starting a jekyll server: type control-C to quit"
+
+		# FIXME: support jekyll 2.0
+		Util.run('jekyll', '--server', '--auto', '--url=http://localhost:4000')
+	end
+end
+
+# ----------------------------------------------------------------------
 # Function to print usage information
 # ----------------------------------------------------------------------
 def usage
